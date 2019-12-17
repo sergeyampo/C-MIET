@@ -1,31 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 
 namespace Fourth_lab_MIET
 {
-    //
-    class StudentsChangedEventArgs<TKey> : EventArgs
-    {
-        public string NameCollection { get; set; }
-        public Action Info { get; set; }
-        public string PropertyName { get; set; }
-        public TKey Key { get; set; }
-
-        public StudentsChangedEventArgs(string name, Action act, string prop, TKey key)
-        {
-            NameCollection = name;
-            Info = act;
-            PropertyName = prop;
-            Key = key;
-        }
-
-        public override string ToString()
-        {
-            return NameCollection + " " + PropertyName;
-        }
-    };
     enum Education
     {
         Specialist,
@@ -33,69 +15,185 @@ namespace Fourth_lab_MIET
         SecondEducation
     };
 
-    class Student : INotifyPropertyChanged
+
+    [Serializable()]
+    class Student : Person
     {
-        delegate TKey KeySelector<TKey>(Student st);
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        public Student(Education educ, int group)
+        public Student(Person person, Education educ, int group) : base(person.Name, person.Surname, person.Date)
         {
-            m_educ = educ;
-            m_group = group;
-            Id = Student._id++;
+            Educ = educ;
+            Group = group;
         }
 
-        public Student()
+        public Student() : base()
         {
-            m_educ = Education.Specialist;
-            m_group = 1;
-            Id = Student._id++;
+            Educ = Education.Bachelor;
+            Group = 1;
         }
 
-        public Education Educ
+        public Person InfoPerson
         {
             get
             {
-                return m_educ;
+                return new Person(Name, Surname, Date);
             }
 
             set
             {
-                if (PropertyChanged != null)
-                {
-                    PropertyChanged(this, new PropertyChangedEventArgs("Education"));
-                }
-                m_educ = value;
+                Name = value.Name;
+                Surname = value.Surname;
+                Date = value.Date;
             }
         }
 
-        public int Group
+        public Education Educ { get; set; }
+
+        public int Group { get; set; }
+
+
+        public List<Exam> Exams
         {
             get
             {
-                return m_group;
+                return m_exams;
             }
 
             set
             {
-                if (PropertyChanged != null)
-                {
-                    PropertyChanged(this, new PropertyChangedEventArgs("Group"));
-                }
-                m_group = value;
+                m_exams = value;
             }
+        }
+
+        public double MiddleMark
+        {
+            get
+            {
+                double avg = m_exams.Count > 0 ? m_exams.Average((Exam e) => e.Mark) : 0.0;
+
+                return avg;
+            }
+        }
+
+        public void AddExams(params Exam[] exams)
+        {
+            if (m_exams == null)
+            {
+                m_exams = new List<Exam>();
+            }
+            m_exams.AddRange(exams);
         }
 
         public override string ToString()
         {
-            return "" + Group;
+            string a = base.ToString() + " " + Group;
+
+            if (m_exams != null)
+            {
+                foreach (Exam i in m_exams)
+                {
+                    a += ("\n" + i);
+                }
+            }
+
+            return a;
         }
 
-        private static int _id = 0;
+        public override string ToShortString()
+        {
+            return base.ToString() + " " + Group + " " + MiddleMark;
+        }
 
-        public int Id;
-        private Education m_educ;
-        private int m_group;
+        public Student Deepcopy()
+        {
+            using (var ms = new MemoryStream())
+            {
+                var formatter = new BinaryFormatter();
+                formatter.Serialize(ms, this);
+                ms.Position = 0;
+
+                return (Student)formatter.Deserialize(ms);
+            }
+        }
+
+        public bool Save(string fn)
+        {
+            return Student.Save(fn, this);
+        }
+
+        public bool Load(string fn)
+        {
+            return Student.Load(fn, this);
+        }
+
+        public bool AddFromConsole()
+        {
+            Console.WriteLine("Title(string)|mark(int)|date(year(int)|month(int)|day(int))");
+            Console.WriteLine("Separators: $, |");
+            Console.WriteLine("Enter: ");
+            string input = Console.ReadLine();
+            char[] sep = { '$', '|' };
+            var par = input.Split(sep);
+            try
+            {
+                this.AddExams(new Exam(par[0], int.Parse(par[1]), new DateTime(int.Parse(par[2]), int.Parse(par[3]), int.Parse(par[4]))));
+                return true;
+            }
+            catch
+            {
+                Console.WriteLine("Incorrect input!");
+                return false;
+            }
+        }
+
+        public static bool Save(string fn, Student obj)
+        {
+            try
+            {
+                using (var fs = new FileStream(fn, FileMode.Create))
+                {
+                    var formatter = new BinaryFormatter();
+                    formatter.Serialize(fs, obj);
+                    return true;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool Load(string fn, Student obj)
+        {
+            try
+            {
+                if (File.Exists(fn))
+                {
+                    using (var fs = new FileStream(fn, FileMode.Open))
+                    {
+                        var deserializer = new BinaryFormatter();
+                        var a = (Student)deserializer.Deserialize(fs);
+                        obj.Assign(a);
+                        return true;
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                Console.WriteLine("Error while reading the file!");
+                return false;
+            }
+        }
+
+        public void Assign(Student a)
+        {
+            this.m_exams = a.m_exams;
+        }
+
+        private List<Exam> m_exams;
     };
 }
 
